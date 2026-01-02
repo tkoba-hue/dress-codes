@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DRESS CODEs</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+    import { getFirestore, collection, addDoc, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+    
+    const firebaseConfig = {
+      apiKey: "AIzaSyClI3Oyp-vg3S46CVzukYeysUuMUjIf8Lk",
+      authDomain: "dress-codes-party.firebaseapp.com",
+      projectId: "dress-codes-party",
+      storageBucket: "dress-codes-party.firebasestorage.app",
+      messagingSenderId: "914618482726",
+      appId: "1:914618482726:web:a13f2fbc01824df027a6e7"
+    };
+    
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    
+    // グローバルに公開
+    window.firebaseDb = db;
+    window.firebaseCollection = collection;
+    window.firebaseAddDoc = addDoc;
+    window.firebaseGetDocs = getDocs;
+    window.firebaseQuery = query;
+    window.firebaseWhere = where;
+  </script>
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400&family=Crimson+Text:wght@400;600&display=swap');
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-weight: 200;
+    }
+    
+    .serif {
+      font-family: 'Crimson Text', serif;
+    }
+    
+    @keyframes breathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+    
+    @keyframes line-grow {
+      from { transform: scaleX(0); }
+      to { transform: scaleX(1); }
+    }
+    
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    .animate-breathe {
+      animation: breathe 6s ease-in-out infinite;
+    }
+    
+    .animate-line-grow {
+      animation: line-grow 1.2s ease-out forwards;
+      transform-origin: left;
+    }
+    
+    .animate-fade-in {
+      animation: fade-in 0.8s ease-out forwards;
+      opacity: 0;
+    }
+    
+    .card {
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+    
+    .card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 20px 40px rgba(255, 255, 255, 0.1);
+    }
+    
+    .card-image {
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+      background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
+    }
+  </style>
+</head>
+<body class="bg-black text-white min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    const DressCodes = () => {
+      const [step, setStep] = useState('input');
+      const [partyInfo, setPartyInfo] = useState({
+        ageGroup: '',
+        userGender: '',
+        location: '',
+        atmosphere: '',
+        attendees: '',
+        budget: ''
+      });
+      const [proposals, setProposals] = useState(null);
+      const [selectedProposal, setSelectedProposal] = useState(null);
+      const [personalInfo, setPersonalInfo] = useState({
+        gender: '',
+        ageGroup: '',
+        budget: ''
+      });
+      const [outfit, setOutfit] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [proposalHistory, setProposalHistory] = useState([]);
+      const [okList, setOkList] = useState([]);
+      const [showRatingModal, setShowRatingModal] = useState(false);
+      const [currentRating, setCurrentRating] = useState(0);
+      const [currentComment, setCurrentComment] = useState('');
+      const [selectedOkEntry, setSelectedOkEntry] = useState(null);
+
+      // OKリストをFirestoreから取得
+      useEffect(() => {
+        const loadOkList = async () => {
+          try {
+            const ratingsSnapshot = await window.firebaseGetDocs(
+              window.firebaseCollection(window.firebaseDb, 'ratings')
+            );
+            
+            const allRatings = [];
+            ratingsSnapshot.forEach(doc => {
+              const data = doc.data();
+              allRatings.push({
+                id: doc.id,
+                dressCode: data.dressCode || '',
+                imageUrl: data.imageUrl || 'https://images.pexels.com/photos/1040945/pexels-photo-1040945.jpeg',
+                rating: data.rating || 0,
+                comment: data.comment || '',
+                outfit: data.outfit || '',
+                timestamp: data.timestamp || new Date().toISOString()
+              });
+            });
+            
+            // 新しい順にソート
+            allRatings.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            setOkList(allRatings);
+          } catch (error) {
+            console.error('OKリスト取得エラー:', error);
+          }
+        };
+        
+        loadOkList();
+      }, []);
+
+      const reset = () => {
+        setStep('input');
+        setPartyInfo({
+          ageGroup: '',
+          userGender: '',
+          location: '',
+          atmosphere: '',
+          attendees: '',
+          budget: ''
+        });
+        setProposals(null);
+        setSelectedProposal(null);
+        setPersonalInfo({ gender: '', ageGroup: '', budget: '' });
+        setOutfit(null);
+        setProposalHistory([]);
+      };
+
+      const handleInputChange = (field, value) => {
+        setPartyInfo(prev => ({ ...prev, [field]: value }));
+      };
+      
+      const handleOkClick = () => {
+        setShowRatingModal(true);
+      };
+      
+      const handleSaveRating = async () => {
+        if (currentRating === 0) {
+          alert('評価を選択してください');
+          return;
+        }
+        
+        const newEntry = {
+          dressCode: selectedProposal.title,
+          imageUrl: selectedProposal.imageUrl,
+          rating: currentRating,
+          comment: currentComment,
+          outfit: outfit.content,
+          timestamp: new Date().toISOString(),
+          category: selectedProposal.category || 'unknown'
+        };
+        
+        // Firestoreに保存
+        try {
+          await window.firebaseAddDoc(window.firebaseCollection(window.firebaseDb, 'ratings'), newEntry);
+          
+          // 保存後、リストをリロード
+          const ratingsSnapshot = await window.firebaseGetDocs(
+            window.firebaseCollection(window.firebaseDb, 'ratings')
+          );
+          
+          const allRatings = [];
+          ratingsSnapshot.forEach(doc => {
+            const data = doc.data();
+            allRatings.push({
+              id: doc.id,
+              ...data
+            });
+          });
+          
+          allRatings.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          setOkList(allRatings);
+          
+        } catch (error) {
+          console.error('Firebase保存エラー:', error);
+        }
+        
+        setShowRatingModal(false);
+        setCurrentRating(0);
+        setCurrentComment('');
+        
+        alert('選ばれた提案に追加しました！');
+      };
+
+      const generateProposals = async () => {
+        setLoading(true);
+        
+        // Firebaseから統計を取得してカテゴリの重み付けを計算
+        let categoryWeights = {};
+        try {
+          const ratingsSnapshot = await window.firebaseGetDocs(
+            window.firebaseCollection(window.firebaseDb, 'ratings')
+          );
+          
+          const categoryRatings = {};
+          const categoryCounts = {};
+          
+          ratingsSnapshot.forEach(doc => {
+            const data = doc.data();
+            const category = data.category || 'unknown';
+            const rating = data.rating || 0;
+            
+            if (!categoryRatings[category]) {
+              categoryRatings[category] = 0;
+              categoryCounts[category] = 0;
+            }
+            
+            categoryRatings[category] += rating;
+            categoryCounts[category] += 1;
+          });
+          
+          // カテゴリ別の平均評価を計算
+          for (const category in categoryRatings) {
+            const avgRating = categoryRatings[category] / categoryCounts[category];
+            // 評価が高いほど選ばれやすくする（0.5〜1.5の範囲）
+            categoryWeights[category] = 0.5 + (avgRating / 5);
+          }
+          
+          console.log('カテゴリ重み:', categoryWeights);
+        } catch (error) {
+          console.error('Firebase統計取得エラー:', error);
+        }
+        
+        // カテゴリをランダム選択（重複回避ロジック付き）
+        const allCategories = {
+          formal: [
+            '正統派フォーマル系（例: ホワイトタイ、ブラックタイ、セミフォーマル）',
+            'スマートカジュアル系（例: ジャケット必須、エレガントカジュアル）'
+          ],
+          kimono: [
+            '和装系（例: 振袖、訪問着、紋付袴、浴衣アレンジ）',
+            '着物モダンアレンジ系（例: 着物×洋服ミックス、羽織活用）'
+          ],
+          historical: [
+            '歴史・文化系（時代・地域・階級を具体的に。例: 18世紀フランス革命期の市民スタイル、薩摩藩の示現流剣士）',
+            'アフリカンファッション系（例: アフロ・フューチャリズム、アンカラ柄、ケンテ布）'
+          ],
+          職業: [
+            'ワンポイント職業系（職業全体の雰囲気。例: スパイ風、執事風、科学者風）',
+          ],
+          character: [
+            'ワンポイントキャラ系（キャラクター全体の雰囲気。例: 海賊風、魔法使い風）',
+          ],
+          situation: [
+            '状態・状況系（今どんな状態の人か。例: 3日徹夜明け、宝くじ当選直後）',
+            '勘違い・誤解系（何かを勘違いしている設定。例: 富豪だと思い込んでいる人）',
+            '世界一〇〇系（それぞれが思う世界一の人。例: 世界一忙しい人）'
+          ],
+          rule: [
+            '色指定系（全身1色、または特定色禁止。例: 全身赤、青禁止）',
+            'サイズ感違反系（大きすぎ/小さすぎ。例: 子供服サイズに無理やり）',
+            '天候違反系（季節外れの装い。例: 真夏に真冬装備）'
+          ],
+          creative: [
+            '架空創作系（存在しない国の民族衣装など。例: 架空の南の島の民族衣装）',
+            'TPO無視系（場所に全く合わない装い。例: レストランなのにピクニック装備）',
+            'ファッショントレンド系（例: Y2K、ゴープコア、サステナブル・ラグジュアリー）'
+          ]
+        };
+        
+        // 異なるカテゴリから3つ選択（重み付き・重複回避）
+        const categoryKeys = Object.keys(allCategories);
+        
+        // 重み付きランダム選択
+        const weightedShuffle = (keys) => {
+          return keys.sort((a, b) => {
+            const weightA = categoryWeights[a] || 1.0;
+            const weightB = categoryWeights[b] || 1.0;
+            return (Math.random() * weightB) - (Math.random() * weightA);
+          });
+        };
+        
+        const shuffledKeys = weightedShuffle([...categoryKeys]);
+        const selectedCategoriesWithKeys = shuffledKeys.slice(0, 3).map(key => {
+          const items = allCategories[key];
+          return {
+            key: key,
+            template: items[Math.floor(Math.random() * items.length)]
+          };
+        });
+        const selectedCategories = selectedCategoriesWithKeys.map(c => c.template);
+        
+        const systemPrompt = `あなたは高級テーラー（仕立屋）の店主です。
+丁寧で真面目な口調で、お客様のパーティーに相応しいドレスコードを提案してください。
+
+【絶対禁止】
+- 下着を外に着る提案
+- 過度な露出
+- 不謹慎なもの（喪服、囚人服など）
+- 公序良俗に反するもの
+- 特定の国や団体の制服・軍服`;
+
+        const partyInfoText = `パーティー情報:
+年代: ${partyInfo.ageGroup || '未定'}
+場所: ${partyInfo.location || '未定'}
+雰囲気: ${partyInfo.atmosphere || '未定'}
+参加人数: ${partyInfo.attendees || '未定'}`;
+
+        const previousTitlesText = proposalHistory.length > 0 
+          ? `\n前回の提案: ${proposalHistory.slice(-6).join(', ')}\n上記とは異なる新しい提案をしてください。`
+          : '';
+
+        const userPrompt = `${partyInfoText}
+
+【提案ジャンル（今回はこの3つから）】
+提案1: ${selectedCategories[0]}
+提案2: ${selectedCategories[1]}
+提案3: ${selectedCategories[2]}
+
+【ルール】
+
+1. タイトルは「雰囲気・テーマ」を表現
+   ○ 「1950年代フィルムノワール探偵風」「ホワイトタイ（正礼装）」「18世紀フランス革命期市民」
+   ○ 「○○風」だけでなく、正統派ドレスコード（ホワイトタイ、ブラックタイ等）も積極的に
+   × 「黒いサングラス1つだけ」（具体的アイテム指定はNG）
+
+2. 説明文の構成
+   - いきなり本題から（受け止め文「かしこまりました」等は不要）
+   - 2-3文、150文字程度
+   - 具体例・入手先のヒントを含める
+
+3. 提案のバランス
+   - 意外性のあるもの1-2個
+   - 実現しやすいもの1-2個
+   - 「○○風」以外の表現も積極的に（正統派ドレスコード、和装、トレンド系等）
+
+4. 実現可能性の工夫
+   - 完璧再現ではなく「雰囲気を出す」
+   - 100円ショップ、古着、普段着の活用
+   - 小物だけでも成立させる
+${previousTitlesText}
+
+【出力形式JSON】
+{
+  "proposal1": {
+    "title": "タイトル（20文字以内）",
+    "description": "説明文（150文字程度、受け止め文なし）",
+    "keywords": ["英語", "画像検索用", "具体的"]
+  },
+  "proposal2": { ... },
+  "proposal3": { ... }
+}
+
+※ keywords: 画像検索用の英語キーワード（視覚的に特徴的なものを選ぶ）
+例: ["spy", "detective", "noir"], ["18th century france", "revolutionary"]`;
+
+        try {
+          const response = await fetch('/api/claude', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'claude-sonnet-4-20250514',
+              max_tokens: 1500,
+              temperature: 0.9,
+              system: systemPrompt,
+              messages: [
+                { role: 'user', content: userPrompt }
+              ]
+            })
+          });
+
+          const data = await response.json();
+          
+          if (!response.ok) {
+            console.error('API Error:', data);
+            throw new Error('API call failed');
+          }
+          
+          const content = data.content.find(item => item.type === 'text')?.text || '';
+          
+          // JSONを抽出
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const proposalsData = JSON.parse(jsonMatch[0]);
+            const proposalsArray = [
+              proposalsData.proposal1,
+              proposalsData.proposal2,
+              proposalsData.proposal3
+            ];
+            
+            // Pexels APIで画像を取得
+            const PEXELS_API_KEY = '6nzrz3VavQN3KgZpxfFsKyYtYNTSEkbaAumMBHUAaGRaeyKFDd2fGLpy';
+            
+            const proposalsWithImages = await Promise.all(
+              proposalsArray.map(async (proposal, index) => {
+                try {
+                  const query = proposal.keywords.join(' ');
+                  const imageResponse = await fetch(
+                    `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=1`,
+                    {
+                      headers: {
+                        Authorization: PEXELS_API_KEY
+                      }
+                    }
+                  );
+                  const imageData = await imageResponse.json();
+                  const imageUrl = imageData.photos && imageData.photos[0] 
+                    ? imageData.photos[0].src.large 
+                    : 'https://images.pexels.com/photos/1040945/pexels-photo-1040945.jpeg'; // フォールバック画像
+                  
+                  return {
+                    ...proposal,
+                    imageUrl,
+                    category: selectedCategoriesWithKeys[index].key
+                  };
+                } catch (error) {
+                  console.error('Image fetch error:', error);
+                  return {
+                    ...proposal,
+                    imageUrl: 'https://images.pexels.com/photos/1040945/pexels-photo-1040945.jpeg',
+                    category: selectedCategoriesWithKeys[index].key
+                  };
+                }
+              })
+            );
+            
+            setProposals(proposalsWithImages);
+            setProposalHistory(prev => [...prev, ...proposalsWithImages.map(p => p.title)]);
+            setStep('selection');
+          }
+        } catch (error) {
+          console.error('Error:', error);
+          // エラー時はダミーデータ
+          const dummyProposals = [
+            {
+              title: "18世紀フランス革命期スタイル",
+              description: "サンキュロットの民衆風でございます。赤い帽子に長ズボン、三色旗のスカーフで。古着屋や通販で揃いますし、小物だけでも雰囲気が出ます。",
+              keywords: ["french", "revolution", "1700s"],
+              imageUrl: "https://images.pexels.com/photos/1040945/pexels-photo-1040945.jpeg"
+            },
+            {
+              title: "スパイ風",
+              description: "007のような洗練されたスパイ風はいかがでしょう。黒のサングラスや謎の封筒など、小物1つだけでOKでございます。普段着にプラスするだけで雰囲気が出ます。",
+              keywords: ["spy", "sunglasses", "agent"],
+              imageUrl: "https://images.pexels.com/photos/1040945/pexels-photo-1040945.jpeg"
+            },
+            {
+              title: "3日徹夜明けの人",
+              description: "疲労困憊した状態を表現いたします。目の下にクマ、コーヒーカップ持参、髪ボサボサで。演技力が試されます。",
+              keywords: ["tired", "sleepy", "coffee"],
+              imageUrl: "https://images.pexels.com/photos/1040945/pexels-photo-1040945.jpeg"
+            }
+          ];
+          
+          setProposals(dummyProposals);
+          setProposalHistory(prev => [...prev, ...dummyProposals.map(p => p.title)]);
+          setStep('selection');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const selectProposal = (proposal) => {
+        setSelectedProposal(proposal);
+        generateOutfit(proposal);
+      };
+
+      const handleNone = async () => {
+        setLoading(true);
+        
+        // 同じロジックで新しい提案を生成
+        await generateProposals();
+      };
+
+      const generateOutfit = async (proposal) => {
+        setLoading(true);
+        
+        const systemPrompt = `あなたは高級テーラー（仕立屋）の店主です。
+お客様が選んだドレスコードを、実際に実現できるよう具体的にサポートします。
+
+【絶対厳守】
+- マークダウン記号（**太字**、_イタリック_など）は一切使用禁止
+- 文字化けする特殊文字は使用禁止
+- 冒頭文は長く詳細に（5-7文、200-300文字程度）
+- 提案は簡潔に（各セクション2-3行程度）
+- 実用性重視（本気で実現させる前提）
+- 丁寧で真面目な口調`;
+
+        const userPrompt = `選択されたドレスコード: 「${proposal.title}」
+説明: ${proposal.description}
+
+お客様の情報:
+- 性別: ${partyInfo.userGender}
+- 年代: ${partyInfo.ageGroup}
+- 予算: ${partyInfo.budget}
+
+このドレスコードを実現するための、簡潔なコーディネート提案をしてください。
+
+【提案内容】
+
+## 冒頭の挨拶・分析
+「承知いたしました。[ドレスコード名]でございますね。」から始め、以下を含める5-7文:
+1. このドレスコードの「肝」は何か（本質的な要素）
+2. 完璧再現が難しい場合、どう工夫して軽く満たすか
+3. 意外な切り口・逆張りの提案（例: 宝くじ当選者なら逆に隠す、など）
+4. アイテム紹介へのつなぎ
+
+例:
+「承知いたしました。マリ帝国貴族風でございますね。このドレスコードの肝は、金の装飾と鮮やかな布地による『富の誇示』にございます。しかしながら、現代の日本で完璧に再現するのは難しゅうございますので、本日は『金色の小物1点』と『幾何学模様のストール』だけで雰囲気を出す実用的な方法をご提案いたします。意外かもしれませんが、宝くじ当選者の方であれば、あえて『控えめな成金感』を演出することで、かえって本物らしさが出ると存じます。では、具体的なアイテムをご覧ください。」
+
+## アイテムリスト
+3-4個のアイテムを箇条書き（・）で列挙。
+各アイテムには「具体的な特徴（色・素材・デザイン・専門用語）」を記載。
+例: ・トップス: インディゴブルーのタギルムスト（トゥアレグ族伝統ターバン、楽天で2,500円程度）
+
+重要: 検索しやすい専門用語を使用
+- × 「アクセサリー」→ ○ 「トゥアレグ族チョーカー」
+- × 「トップス」→ ○ 「18世紀ブリオー帽子」
+- × 「布」→ ○ 「カンガ・パーニュ アフリカ布」
+
+## 予算配分
+${partyInfo.budget}内で揃える方法を2-3行で。
+
+## 入手方法
+購入先を1-2行で簡潔に。専門店名や具体的なブランド名を含める。
+
+## 着こなしのポイント
+雰囲気を出すコツを2-3行で。
+
+【絶対禁止】
+- **太字**、_イタリック_などのマークダウン記号
+- 特殊文字（��など文字化けするもの）
+- 長文説明（冒頭以外は各セクション3行以内）
+- 一般的すぎる単語（「トップス」「アクセサリー」だけはNG）`;
+
+        try {
+          const response = await fetch('/api/claude', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'claude-sonnet-4-20250514',
+              max_tokens: 1000,
+              temperature: 0.7,
+              system: systemPrompt,
+              messages: [
+                { role: 'user', content: userPrompt }
+              ]
+            })
+          });
+
+          const data = await response.json();
+          
+          if (!response.ok) {
+            console.error('API Error:', data);
+            throw new Error('API call failed');
+          }
+          
+          const content = data.content.find(item => item.type === 'text')?.text || '';
+          
+          // アイテム名を抽出（改善版: 具体的な説明を含める）
+          const items = [];
+          
+          // "・アイテム名: 説明" の形式から抽出
+          const itemPattern = /・([^：:\n]+)[：:]([^\n（(]+)/g;
+          let match;
+          while ((match = itemPattern.exec(content)) !== null) {
+            const itemCategory = match[1].trim(); // トップス、ボトムス等
+            const itemDetail = match[2].trim();    // 具体的な説明
+            
+            // 具体的な説明から最初の数単語を抽出（価格・店舗情報を除外）
+            const detailWords = itemDetail
+              .replace(/（.*?）/g, '') // 括弧内を削除
+              .replace(/\(.*?\)/g, '')
+              .replace(/[0-9,]+円.*/, '') // 価格情報を削除
+              .replace(/、.*/, '') // 複数の説明がある場合は最初だけ
+              .split(/\s+/)
+              .slice(0, 3) // 最初の3単語まで
+              .join(' ')
+              .trim();
+            
+            if (detailWords && detailWords.length > 2) {
+              items.push(detailWords);
+            } else if (itemCategory) {
+              // 具体的な説明がない場合はカテゴリ名を使用
+              items.push(itemCategory);
+            }
+          }
+          
+          // アイテムが抽出できなかった場合は、ドレスコードタイトルから生成
+          if (items.length === 0) {
+            const dresscode = selectedProposal.title;
+            items.push(`${dresscode} 衣装`);
+          }
+          
+          setOutfit({
+            content: content,
+            items: items.slice(0, 6) // 最大6個まで
+          });
+          setStep('outfit');
+        } catch (error) {
+          console.error('Error:', error);
+          // エラー時はダミーデータ
+          const dummyOutfit = {
+            content: `${personalInfo.gender === 'Male' ? '男性' : personalInfo.gender === 'Female' ? '女性' : ''}向けの${selectedProposal.title}の具体的なコーディネート提案でございます。\n\n【アイテムリスト】\n・トップス: ○○○（色、デザイン詳細）\n・ボトムス: ○○○\n・靴: ○○○\n・小物: ○○○\n\n【予算配分】\n${personalInfo.budget}内で揃える方法をご提案いたします。\n・必須アイテム: ○○○（予算の50%）\n・アクセント: ○○○（予算の30%）\n・小物: ○○○（予算の20%）\n\n【入手方法】\n・楽天市場、Amazonで「○○○」と検索\n・しまむら、ドン・キホーテなどで手頃に\n・100円ショップで小物を\n・レンタル衣装店も活用可能でございます\n\n【着こなしのポイント】\nこの雰囲気を出すには...`,
+            items: [selectedProposal.title.includes('スパイ') ? '黒サングラス' : 'トップス', 'ボトムス', '靴', '小物']
+          };
+          
+          setOutfit(dummyOutfit);
+          setStep('outfit');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      // パーティー情報入力画面
+      if (step === 'input') {
+        return (
+          <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
+            {/* ロゴ - 左上固定 */}
+            <div className="fixed top-6 left-6 z-50">
+              <button onClick={() => setStep('input')} className="text-2xl font-extralight tracking-[0.3em] text-gray-200 hover:text-white transition-colors">
+                DRESS CODEs
+              </button>
+            </div>
+            
+            {/* 選ばれた提案カルーセル - 右側固定 */}
+            {okList.length > 0 && (
+              <div className="fixed right-6 top-1/2 -translate-y-1/2 z-50 w-48">
+                <button
+                  onClick={() => setStep('okList')}
+                  className="w-full mb-4 px-4 py-2 bg-gray-900 border border-gray-700 text-gray-200 hover:text-white hover:border-gray-500 transition-colors text-sm"
+                >
+                  選ばれた提案 ({okList.length})
+                </button>
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {okList.slice(-3).reverse().map(entry => (
+                    <button
+                      key={entry.id}
+                      onClick={() => setStep('okList')}
+                      className="w-full bg-gray-950 border border-gray-800 p-3 hover:border-gray-600 transition-all text-left"
+                    >
+                      <img
+                        src={entry.imageUrl}
+                        alt={entry.dressCode}
+                        className="w-full h-24 object-cover mb-2"
+                      />
+                      <p className="text-xs text-gray-300 truncate">{entry.dressCode}</p>
+                      <div className="text-yellow-500 text-xs mt-1">
+                        {'★'.repeat(entry.rating)}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div className="max-w-4xl w-full">
+              <img 
+                src="butler.png" 
+                alt="Butler" 
+                style={{height: '375px', width: 'auto'}} 
+                className="mx-auto mb-12 animate-fade-in" 
+              />
+              
+              <p className="text-center text-gray-100 mb-16 serif text-2xl">
+                どのようなパーティーのご予定でしょうか
+              </p>
+
+              <div className="space-y-12">
+                <div className="border-t border-gray-900 pt-8 animate-line-grow animate-fade-in">
+                  <label className="block text-xs uppercase tracking-[0.2em] text-gray-200 mb-4 serif">
+                    01 / 年代
+                  </label>
+                  <div className="flex gap-4 md:gap-6 flex-wrap justify-center">
+                    {['20代', '30代', '40代', '50代以上'].map(age => (
+                      <label key={age} className="flex items-center gap-2 cursor-pointer group px-3 py-2 -mx-3 -my-2">
+                        <input
+                          type="radio"
+                          name="ageGroup"
+                          checked={partyInfo.ageGroup === age}
+                          onChange={() => handleInputChange('ageGroup', age)}
+                          className="w-5 h-5 md:w-4 md:h-4 accent-white cursor-pointer"
+                        />
+                        <span className={`text-base md:text-sm serif transition-colors ${
+                          partyInfo.ageGroup === age ? 'text-white' : 'text-gray-200 group-hover:text-gray-200'
+                        }`}>
+                          {age}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-900 pt-8 animate-line-grow animate-fade-in" style={{animationDelay: '0.1s'}}>
+                  <label className="block text-xs uppercase tracking-[0.2em] text-gray-200 mb-4 serif">
+                    02 / 性別
+                  </label>
+                  <div className="flex gap-6 flex-wrap justify-center">
+                    {['男性', '女性', 'その他'].map(gender => (
+                      <label key={gender} className="flex items-center gap-2 cursor-pointer group px-3 py-2 -mx-3 -my-2">
+                        <input
+                          type="radio"
+                          name="userGender"
+                          checked={partyInfo.userGender === gender}
+                          onChange={() => handleInputChange('userGender', gender)}
+                          className="w-5 h-5 md:w-4 md:h-4 accent-white cursor-pointer"
+                        />
+                        <span className={`text-sm serif transition-colors ${
+                          partyInfo.userGender === gender ? 'text-white' : 'text-gray-200 group-hover:text-gray-200'
+                        }`}>
+                          {gender}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-900 pt-8 animate-line-grow animate-fade-in" style={{animationDelay: '0.2s'}}>
+                  <label className="block text-xs uppercase tracking-[0.2em] text-gray-200 mb-4 serif">
+                    03 / 場所
+                  </label>
+                  <div className="flex gap-6 flex-wrap justify-center">
+                    {['レストラン', '居酒屋', 'カフェ', '野外', '家', 'その他'].map(loc => (
+                      <label key={loc} className="flex items-center gap-2 cursor-pointer group px-3 py-2 -mx-3 -my-2">
+                        <input
+                          type="radio"
+                          name="location"
+                          checked={partyInfo.location === loc}
+                          onChange={() => handleInputChange('location', loc)}
+                          className="w-5 h-5 md:w-4 md:h-4 accent-white cursor-pointer"
+                        />
+                        <span className={`text-sm serif transition-colors ${
+                          partyInfo.location === loc ? 'text-white' : 'text-gray-200 group-hover:text-gray-200'
+                        }`}>
+                          {loc}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-900 pt-8 animate-line-grow animate-fade-in" style={{animationDelay: '0.3s'}}>
+                  <label className="block text-xs uppercase tracking-[0.2em] text-gray-200 mb-4 serif">
+                    04 / 雰囲気
+                  </label>
+                  <input
+                    type="text"
+                    value={partyInfo.atmosphere}
+                    onChange={(e) => handleInputChange('atmosphere', e.target.value)}
+                    placeholder="カジュアル、楽しい、エレガント..."
+                    className="w-full bg-gray-900 text-gray-200 text-sm tracking-wide border border-gray-700 p-4 focus:border-white focus:outline-none transition-all placeholder-gray-500 serif shadow-sm"
+                  />
+                </div>
+
+                <div className="border-t border-gray-900 pt-8 animate-line-grow animate-fade-in" style={{animationDelay: '0.4s'}}>
+                  <label className="block text-xs uppercase tracking-[0.2em] text-gray-200 mb-4 serif">
+                    05 / 参加人数
+                  </label>
+                  <input
+                    type="text"
+                    value={partyInfo.attendees}
+                    onChange={(e) => handleInputChange('attendees', e.target.value)}
+                    placeholder="10人くらい..."
+                    className="w-full bg-gray-900 text-gray-200 text-sm tracking-wide border border-gray-700 p-4 focus:border-white focus:outline-none transition-all placeholder-gray-500 serif shadow-sm"
+                  />
+                </div>
+
+                <div className="border-t border-gray-900 pt-8 animate-line-grow animate-fade-in" style={{animationDelay: '0.5s'}}>
+                  <label className="block text-xs uppercase tracking-[0.2em] text-gray-200 mb-4 serif">
+                    06 / 衣装予算
+                  </label>
+                  <div className="flex gap-6 flex-wrap justify-center">
+                    {['～3000円', '～10000円', '制限なし'].map(budget => (
+                      <label key={budget} className="flex items-center gap-2 cursor-pointer group px-3 py-2 -mx-3 -my-2">
+                        <input
+                          type="radio"
+                          name="budget"
+                          checked={partyInfo.budget === budget}
+                          onChange={() => handleInputChange('budget', budget)}
+                          className="w-5 h-5 md:w-4 md:h-4 accent-white cursor-pointer"
+                        />
+                        <span className={`text-sm serif transition-colors ${
+                          partyInfo.budget === budget ? 'text-white' : 'text-gray-200 group-hover:text-gray-200'
+                        }`}>
+                          {budget}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-800 pt-16 pb-8 animate-line-grow animate-fade-in" style={{animationDelay: '0.6s'}}>
+                  <button
+                    onClick={generateProposals}
+                    disabled={loading}
+                    className="group text-2xl uppercase tracking-[0.3em] text-gray-100 hover:text-white transition-colors disabled:opacity-50 cursor-pointer border-b-2 border-transparent hover:border-white pb-2"
+                  >
+                    <span className="text-gray-200 group-hover:text-gray-200 transition-colors">/</span> {loading ? (
+                      <span className="inline-flex items-center gap-2 text-white font-semibold">
+                        執事が考え中
+                        <span className="inline-flex gap-1">
+                          <span className="animate-bounce" style={{animationDelay: '0s'}}>.</span>
+                          <span className="animate-bounce" style={{animationDelay: '0.2s'}}>.</span>
+                          <span className="animate-bounce" style={{animationDelay: '0.4s'}}>.</span>
+                        </span>
+                      </span>
+                    ) : 'ご提案 →'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // ドレスコード選択画面
+      if (step === 'selection' && proposals) {
+        return (
+          <div className="min-h-screen bg-black text-white p-6 py-12">
+            {/* ロゴ - 左上固定 */}
+            <div className="fixed top-6 left-6 z-50">
+              <button onClick={() => setStep('input')} className="text-xl font-extralight tracking-[0.3em] text-gray-200 hover:text-white transition-colors">
+                DRESS CODEs
+              </button>
+            </div>
+            
+            {/* 選ばれた提案 - 右下固定 */}
+            {okList.length > 0 && (
+              <button
+                onClick={() => setStep('okList')}
+                className="fixed bottom-6 right-6 z-50 px-4 py-2 bg-gray-900 border border-gray-700 text-gray-300 hover:text-white hover:border-gray-500 transition-colors text-sm"
+              >
+                選ばれた提案 ({okList.length})
+              </button>
+            )}
+            
+            <img 
+              src="butler.png" 
+              alt="Butler" 
+              style={{height: '180px', width: 'auto'}} 
+              className="mx-auto mb-6" 
+            />
+            
+            <p className="text-center text-gray-200 mb-8 serif text-lg max-w-4xl mx-auto">
+              かしこまりました。こういったドレスコードではいかがでしょうか
+            </p>
+            
+            {/* ヘッダー */}
+            <div className="max-w-7xl mx-auto mb-8 flex justify-end items-center">
+              <button
+                onClick={reset}
+                className="text-sm text-gray-200 hover:text-white transition-colors uppercase tracking-wider"
+              >
+                やめる
+              </button>
+            </div>
+
+            {/* カード表示 */}
+            <div className="max-w-7xl mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-8 px-2 md:px-0">
+                {proposals.map((proposal, index) => (
+                  <div
+                    key={index}
+                    onClick={() => selectProposal(proposal)}
+                    className="card bg-gray-950 border-2 border-gray-900 overflow-hidden hover:border-white transition-all cursor-pointer active:scale-95"
+                  >
+                    <img
+                      src={proposal.imageUrl}
+                      alt={proposal.title}
+                      className="card-image w-full h-48 md:h-64 object-cover"
+                    />
+                    <div className="p-4 md:p-6">
+                      <h3 className="text-base md:text-lg font-light mb-2 md:mb-3 tracking-wide">{proposal.title}</h3>
+                      <p className="text-xs md:text-sm text-gray-200 serif leading-relaxed">{proposal.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* NONEカード */}
+              <div className="flex justify-center">
+                <button
+                  onClick={handleNone}
+                  disabled={loading}
+                  className="card bg-gray-950 border border-gray-800 p-8 min-w-[300px] hover:border-gray-600 disabled:opacity-50"
+                >
+                  <h3 className="text-xl font-light mb-2 tracking-wide">NONE</h3>
+                  <p className="text-sm text-gray-200 serif">
+                    {loading ? (
+                      <span className="inline-flex items-center gap-2 text-white font-semibold">
+                        執事が提案を考え中
+                        <span className="inline-flex gap-1">
+                          <span className="animate-bounce" style={{animationDelay: '0s'}}>.</span>
+                          <span className="animate-bounce" style={{animationDelay: '0.2s'}}>.</span>
+                          <span className="animate-bounce" style={{animationDelay: '0.4s'}}>.</span>
+                        </span>
+                      </span>
+                    ) : '他の提案を見る'}
+                  </p>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+
+      // コーディネート提案画面
+      if (step === 'outfit' && outfit) {
+        return (
+          <div className="min-h-screen bg-black text-white p-6 py-12">
+            {/* ロゴ - 左上固定 */}
+            <div className="fixed top-6 left-6 z-50">
+              <button onClick={() => setStep('input')} className="text-xl font-extralight tracking-[0.3em] text-gray-200 hover:text-white transition-colors">
+                DRESS CODEs
+              </button>
+            </div>
+            
+            {/* 選ばれた提案 - 右下固定 */}
+            {okList.length > 0 && (
+              <button
+                onClick={() => setStep('okList')}
+                className="fixed bottom-6 right-6 z-50 px-4 py-2 bg-gray-900 border border-gray-700 text-gray-300 hover:text-white hover:border-gray-500 transition-colors text-sm"
+              >
+                選ばれた提案 ({okList.length})
+              </button>
+            )}
+            
+            <img 
+              src="butler.png" 
+              alt="Butler" 
+              style={{height: '180px', width: 'auto'}} 
+              className="mx-auto mb-6" 
+            />
+            
+            <p className="text-center text-gray-200 mb-8 serif text-lg max-w-4xl mx-auto">
+              お客様におすすめのコーディネートはこちらでございます
+            </p>
+            
+            <div className="max-w-4xl mx-auto">
+              {/* 選択したドレスコード画像 */}
+              {selectedProposal && selectedProposal.imageUrl && (
+                <div className="mb-8">
+                  <img 
+                    src={selectedProposal.imageUrl} 
+                    alt={selectedProposal.title}
+                    className="w-full max-w-2xl mx-auto rounded-lg border border-gray-800"
+                    style={{maxHeight: '300px', objectFit: 'cover'}}
+                  />
+                </div>
+              )}
+              
+              <div className="mb-8">
+                <h2 className="text-3xl font-light tracking-wide mb-2">{selectedProposal.title}</h2>
+                <p className="text-base text-gray-300 serif">
+                  {partyInfo.userGender} / {partyInfo.ageGroup} / 予算: {partyInfo.budget}
+                </p>
+              </div>
+
+              <div className="bg-gray-950 border border-gray-900 p-8 mb-8 serif">
+                <div 
+                  className="text-gray-300 leading-relaxed"
+                  dangerouslySetInnerHTML={{
+                    __html: outfit.content
+                      .replace(/\*\*([^*]+)\*\*/g, '$1')  // **太字** → 太字
+                      .replace(/_([^_]+)_/g, '$1')  // _イタリック_ → イタリック
+                      .replace(/��/g, '')  // 文字化け削除
+                      .replace(/## ([^\n]+)/g, '<h3 class="text-lg font-light mt-6 mb-3 text-white border-b border-gray-800 pb-2">$1</h3>')
+                      .replace(/・([^\n]+)/g, '<div class="ml-4 mb-2">・$1</div>')
+                      .replace(/\n\n/g, '<br/><br/>')
+                  }}
+                />
+              </div>
+
+              {outfit.items && outfit.items.length > 0 && (
+                <div className="bg-gray-950 border border-gray-900 p-8 mb-8">
+                  <h3 className="text-lg font-light mb-4 tracking-wide">購入先リンク</h3>
+                  <div className="space-y-3">
+                    {outfit.items.map((item, index) => {
+                      const searchKeyword = `${selectedProposal.title} ${item}`;
+                      return (
+                        <div key={index} className="text-sm text-gray-200 serif">
+                          <span className="text-gray-200">{item}:</span>
+                          <div className="mt-1 flex gap-4 flex-wrap">
+                            <a
+                              href={`https://www.google.com/search?q=${encodeURIComponent(searchKeyword)}&tbm=isch`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-gray-300 hover:text-white transition-colors"
+                            >
+                              🖼️ Google画像
+                            </a>
+                            <a
+                              href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(searchKeyword)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-gray-300 hover:text-white transition-colors"
+                            >
+                              🛍️ Amazon
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-4 justify-center">
+                <button
+                  onClick={() => setStep('selection')}
+                  className="px-8 py-3 border border-gray-800 text-gray-200 hover:text-white hover:border-gray-600 transition-all"
+                >
+                  ドレスコード選択に戻る
+                </button>
+                <button
+                  onClick={reset}
+                  className="px-6 py-3 border border-gray-800 text-gray-200 hover:text-white hover:border-gray-600 transition-all"
+                >
+                  最初から
+                </button>
+                <button
+                  onClick={handleOkClick}
+                  className="px-8 py-3 bg-white text-black hover:bg-gray-200 transition-all font-semibold"
+                >
+                  OK
+                </button>
+              </div>
+              
+              {/* 評価モーダル */}
+              {showRatingModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center p-6 z-50">
+                  <div className="bg-gray-950 border border-gray-800 p-8 max-w-md w-full">
+                    <h3 className="text-2xl font-light mb-6 text-center">このコーディネートを評価してください</h3>
+                    
+                    <div className="mb-6">
+                      <div className="flex justify-center gap-2 mb-4">
+                        {[1, 2, 3, 4, 5].map(rating => (
+                          <button
+                            key={rating}
+                            onClick={() => setCurrentRating(rating)}
+                            className="text-4xl transition-all hover:scale-110"
+                          >
+                            {rating <= currentRating ? '★' : '☆'}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-center text-sm text-gray-200">
+                        {currentRating === 0 ? '評価を選択してください' : `${currentRating}つ星`}
+                      </p>
+                    </div>
+                    
+                    <div className="mb-6">
+                      <label className="block text-sm text-gray-200 mb-2">一言メモ（任意）</label>
+                      <textarea
+                        value={currentComment}
+                        onChange={(e) => setCurrentComment(e.target.value)}
+                        placeholder="実現できそう！週末やってみる"
+                        className="w-full bg-gray-900 border border-gray-700 p-3 text-sm rounded focus:border-white focus:outline-none"
+                        rows="3"
+                      />
+                    </div>
+                    
+                    <div className="flex gap-4">
+                      <button
+                        onClick={() => {
+                          setShowRatingModal(false);
+                          setCurrentRating(0);
+                          setCurrentComment('');
+                        }}
+                        className="flex-1 px-6 py-3 border border-gray-800 text-gray-200 hover:text-white hover:border-gray-600 transition-all"
+                      >
+                        キャンセル
+                      </button>
+                      <button
+                        onClick={handleSaveRating}
+                        className="flex-1 px-6 py-3 bg-white text-black hover:bg-gray-200 transition-all font-semibold"
+                      >
+                        保存する
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+      
+      // OKリストページ
+      if (step === 'okList') {
+        return (
+          <div className="min-h-screen bg-black text-white p-6 py-12">
+            <div className="fixed top-6 left-6 z-50">
+              <h2 className="text-xl font-extralight tracking-[0.3em] text-gray-200">DRESS CODEs</h2>
+            </div>
+            
+            <div className="max-w-6xl mx-auto">
+              <div className="flex justify-between items-center mb-8">
+                <h2 className="text-3xl font-light">選ばれた提案</h2>
+                <button
+                  onClick={reset}
+                  className="px-6 py-2 border border-gray-800 text-gray-200 hover:text-white hover:border-gray-600 transition-all"
+                >
+                  最初から
+                </button>
+              </div>
+              
+              {okList.length === 0 ? (
+                <div className="text-center text-gray-200 py-20">
+                  <p className="text-lg">まだ選ばれた提案はありません</p>
+                  <button
+                    onClick={reset}
+                    className="mt-8 px-8 py-3 bg-white text-black hover:bg-gray-200 transition-all"
+                  >
+                    提案を受ける
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {okList.map(entry => (
+                    <button
+                      key={entry.id}
+                      onClick={() => setSelectedOkEntry(entry)}
+                      className="bg-gray-950 border border-gray-900 overflow-hidden hover:border-gray-200 transition-all text-left"
+                    >
+                      <img
+                        src={entry.imageUrl}
+                        alt={entry.dressCode}
+                        className="w-full h-48 object-cover"
+                      />
+                      <div className="p-6">
+                        <h3 className="text-lg font-light mb-2">{entry.dressCode}</h3>
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="text-yellow-500">
+                            {'★'.repeat(entry.rating)}{'☆'.repeat(5 - entry.rating)}
+                          </div>
+                          <span className="text-sm text-gray-200">({entry.rating})</span>
+                        </div>
+                        {entry.comment && (
+                          <p className="text-sm text-gray-200 italic mb-3">「{entry.comment}」</p>
+                        )}
+                        <p className="text-xs text-gray-200">
+                          {new Date(entry.timestamp).toLocaleDateString('ja-JP')}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              {/* ポップアップ: 提案文表示 */}
+              {selectedOkEntry && (
+                <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center p-6 z-50" onClick={() => setSelectedOkEntry(null)}>
+                  <div className="bg-gray-950 border border-gray-800 p-8 max-w-4xl w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex justify-between items-start mb-6">
+                      <div>
+                        <h2 className="text-3xl font-light mb-2">{selectedOkEntry.dressCode}</h2>
+                        <div className="flex items-center gap-3">
+                          <div className="text-yellow-500 text-xl">
+                            {'★'.repeat(selectedOkEntry.rating)}{'☆'.repeat(5 - selectedOkEntry.rating)}
+                          </div>
+                          {selectedOkEntry.comment && (
+                            <p className="text-gray-200 italic">「{selectedOkEntry.comment}」</p>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setSelectedOkEntry(null)}
+                        className="text-gray-200 hover:text-white text-2xl"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    
+                    <img
+                      src={selectedOkEntry.imageUrl}
+                      alt={selectedOkEntry.dressCode}
+                      className="w-full max-h-64 object-cover mb-6 rounded"
+                    />
+                    
+                    <div 
+                      className="text-gray-200 leading-relaxed prose prose-invert max-w-none"
+                      dangerouslySetInnerHTML={{
+                        __html: selectedOkEntry.outfit
+                          .replace(/\*\*([^*]+)\*\*/g, '$1')
+                          .replace(/_([^_]+)_/g, '$1')
+                          .replace(/��/g, '')
+                          .replace(/## ([^\n]+)/g, '<h3 class="text-xl font-light mt-6 mb-3 text-white border-b border-gray-800 pb-2">$1</h3>')
+                          .replace(/・([^\n]+)/g, '<div class="ml-4 mb-2">・$1</div>')
+                          .replace(/\n\n/g, '<br/><br/>')
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      return null;
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<DressCodes />);
+  </script>
+</body>
+</html>
